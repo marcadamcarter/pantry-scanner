@@ -15,7 +15,7 @@ workflows:
         # If you’re in multiple Apple teams, add the next line with your Team ID:
         # apple_team_id: R8R7RPBZ78
       vars:
-        XCODE_PROJECT: PantryScanner\Pantry.xcodeproj     # <-- update to the real path if nested
+        XCODE_PROJECT: PantryScanner/Pantry.xcodeproj     # <-- update to the real path if nested
         XCODE_SCHEME: PantryScanner                 # keep your scheme name
         BUNDLE_ID: com.northpadreisles.PantryScanner
 
