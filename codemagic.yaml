@@ -21,16 +21,17 @@ workflows:
         #apple_team_id: R8R77PB278
 
     scripts:
-      - name: Verify bundle identifier & team
+      - name: Verify bundle identifier & team (non-blocking)
         script: |
-          xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -list
           xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -showBuildSettings | tee buildsettings.txt
-          BID=$(awk -F= '/PRODUCT_BUNDLE_IDENTIFIER/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
-          TEAM=$(awk -F= '/DEVELOPMENT_TEAM =/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
-          echo "Detected PRODUCT_BUNDLE_IDENTIFIER: $BID"
-          echo "Detected DEVELOPMENT_TEAM: $TEAM"
-          test "$BID" = "$BUNDLE_ID" || { echo "❌ Bundle ID mismatch ($BID != $BUNDLE_ID)"; exit 1; }
-          test "$TEAM" = "R8R77PB278" || { echo "❌ Team mismatch ($TEAM != R8R77PB278)"; exit 1; }
+          BID=$(awk -F= '/PRODUCT_BUNDLE_IDENTIFIER/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt || true)
+          TEAM=$(awk -F= '/DEVELOPMENT_TEAM =/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt || true)
+          echo "Detected PRODUCT_BUNDLE_IDENTIFIER: ${BID:-<none>}"
+          echo "Detected DEVELOPMENT_TEAM: ${TEAM:-<none>}"
+          if [ "$BID" != "com.northpadreisles.PantryScanner" ]; then
+            echo "⚠️  Bundle ID in project is '$BID'. We'll override it during archive."
+          fi
+
 
       - name: Prepare signing (install certs, ensure App Store profile)
         script: |
@@ -45,7 +46,7 @@ workflows:
           echo "Scheme:  $XCODE_SCHEME"
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME" \
             --archive-xcargs "PRODUCT_BUNDLE_IDENTIFIER=com.northpadreisles.PantryScanner DEVELOPMENT_TEAM=R8R77PB278 CODE_SIGN_STYLE=Manual"
 
     artifacts:
