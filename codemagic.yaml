@@ -1,30 +1,33 @@
-- name: Diagnose signing inventory
-  script: |
-    echo "Team ID (set this if you're in multiple teams): $APPLE_TEAM_ID"
-    app-store-connect list-certificates --type IOS_DISTRIBUTION || true
-    app-store-connect list-profiles --bundle-id "com.northpadreisles.PantryScanner" --type IOS_APP_STORE || true
-
 workflows:
   pantryscanner_testflight:
-    name: PantryScanner – TestFlight
+    name: PantryScanner - TestFlight
     max_build_duration: 60
 
+    # ⬇️ Make sure this matches the name of your App Store Connect integration in Codemagic
     integrations:
-      # Must match Codemagic → Teams → Integrations
       app_store_connect: PantryScannerKey
 
     environment:
       ios_signing:
-        # Allowed: ad_hoc | app_store | development | enterprise
+        # Allowed values: ad_hoc | app_store | development | enterprise
         distribution_type: app_store
         bundle_identifier: com.northpadreisles.PantryScanner
-        # apple_team_id: ABCDE12345   # uncomment if you’re in multiple teams
+        # If you’re in multiple Apple teams, add the next line with your Team ID:
+        # apple_team_id: R8R7RPBZ78
       vars:
         XCODE_WORKSPACE: PantryScanner.xcworkspace
         XCODE_SCHEME: PantryScanner
         BUNDLE_ID: com.northpadreisles.PantryScanner
 
     scripts:
+      # ---------- 1) DIAGNOSTIC (lists what Codemagic can see) ----------
+      - name: Diagnose signing inventory
+        script: |
+          echo "Listing Apple Distribution certs and App Store profiles for $BUNDLE_ID"
+          app-store-connect list-certificates --type IOS_DISTRIBUTION || true
+          app-store-connect list-profiles --bundle-id "$BUNDLE_ID" --type IOS_APP_STORE || true
+
+      # ---------- 2) FETCH/CREATE PROFILE & CONFIGURE XCODE ----------
       - name: Prepare signing (fetch/create App Store profile)
         script: |
           keychain initialize
@@ -32,12 +35,14 @@ workflows:
           keychain add-certificates
           xcode-project use-profiles
 
+      # ---------- 3) (Optional) COCOAPODS ----------
       - name: Install CocoaPods
         script: |
           gem install cocoapods --no-document
           pod repo update
           pod install
 
+      # ---------- 4) BUILD ----------
       - name: Build IPA
         script: |
           xcode-project build-ipa \
