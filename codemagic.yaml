@@ -36,6 +36,11 @@ workflows:
           echo "Listing Apple Distribution certs and App Store profiles for $BUNDLE_ID"
           app-store-connect list-certificates --type IOS_DISTRIBUTION || true
           app-store-connect list-profiles --bundle-id "$BUNDLE_ID" --type IOS_APP_STORE || true
+          xcodebuild -project "PantryScanner/Pantry.xcodeproj" -scheme "SimpleNews" -showBuildSettings | tee buildsettings.txt
+          BUNDLE=$(awk -F= '/PRODUCT_BUNDLE_IDENTIFIER/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
+          TEAM=$(awk -F= '/DEVELOPMENT_TEAM =/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
+          echo "Detected PRODUCT_BUNDLE_IDENTIFIER: $BUNDLE"
+          echo "Detected DEVELOPMENT_TEAM: $TEAM"
 
       # ---------- 2) FETCH/CREATE PROFILE & CONFIGURE XCODE ----------
       - name: Prepare signing (fetch/create App Store profile)
