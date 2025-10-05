@@ -30,13 +30,11 @@ A lightweight iOS app to **scan barcodes**, track **expiration dates**, and keep
 
 ```
 .
-├── PantryScanner.xcodeproj
+├── PantryScanner\Pantry.xcodeproj
 ├── codemagic.yaml
 ├── README.md
 └── (source files…)
 ```
-
-> Note: This project builds from the **.xcodeproj** (no CocoaPods, no `.xcworkspace`).
 
 ---
 
@@ -77,13 +75,6 @@ A lightweight iOS app to **scan barcodes**, track **expiration dates**, and keep
   - (Optional) Upload a manually created **iOS App Store** provisioning profile for the bundle ID
 
 > No secrets are stored in the repository; they live in Codemagic.
-
----
-
-## Security & Privacy
-
-- Do **not** commit secrets, private keys, or provisioning profiles.
-- Restrict any API keys (if added later) by bundle ID and domain where possible.
 
 ---
 

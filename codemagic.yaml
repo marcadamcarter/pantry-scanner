@@ -15,16 +15,20 @@ workflows:
         # If you’re in multiple Apple teams, add the next line with your Team ID:
         # apple_team_id: R8R7RPBZ78
       vars:
-        XCODE_PROJECT: PantryScanner\Pantry.xcodeproj     # <-- update to the real path if nested
+        XCODE_PROJECT: PantryScanner/Pantry.xcodeproj     # <-- update to the real path if nested
         XCODE_SCHEME: PantryScanner                 # keep your scheme name
         BUNDLE_ID: com.northpadreisles.PantryScanner
 
     scripts:
       # ---------- 0) HELPER (Helps if paths are wrong) ----------
-      - name: Locate Xcode files
+      - name: Locate Xcode project/workspace (deep)
         script: |
-          echo "Repo tree (top 2 levels):"
-          find . -maxdepth 2 -name "*.xcodeproj" -o -name "*.xcworkspace" -print
+          echo "PWD: $(pwd)"
+          echo "Searching for .xcodeproj / .xcworkspace anywhere…"
+          find . -type d -name "*.xcodeproj" -print
+          find . -type d -name "*.xcworkspace" -print
+          echo "Top-level tree:"
+          ls -la
 
       # ---------- 1) DIAGNOSTIC (lists what Codemagic can see) ----------
       - name: Diagnose signing inventory
@@ -44,6 +48,12 @@ workflows:
       # ---------- 3) BUILD ----------
       - name: Build IPA
         script: |
+          echo "Using project: $XCODE_PROJECT"
+          echo "Using scheme:  $XCODE_SCHEME"
+
+          echo "Listing schemes to verify:"
+          xcodebuild -list -project "$XCODE_PROJECT" || true
+
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
