@@ -1,0 +1,32 @@
+workflows:
+  pantryscanner_testflight:
+    name: PantryScanner TestFlight
+    environment:
+      ios_signing:
+        distribution_type: app_store
+      vars:
+        XCODE_PROJECT: PantryScanner/SimpleNews/SimpleNews.xcodeproj
+        XCODE_SCHEME: SimpleNews
+    scripts:
+      - name: Build archive
+        script: |
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath $CM_BUILD_DIR/app.xcarchive \
+            clean archive CODE_SIGN_STYLE=Automatic
+      - name: Export ipa
+        script: |
+          xcodebuild -exportArchive \
+            -archivePath $CM_BUILD_DIR/app.xcarchive \
+            -exportPath $CM_BUILD_DIR/export \
+            -exportOptionsPlist /Applications/exportOptions.plist || true
+    artifacts:
+      - $CM_BUILD_DIR/export/*.ipa
+      - $CM_BUILD_DIR/app.xcarchive
+    publishing:
+      app_store_connect:
+        auth: api_key
+        submit_to_testflight: true
