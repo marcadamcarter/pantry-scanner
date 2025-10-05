@@ -1,0 +1,4 @@
+<key>NSCameraUsageDescription</key>
+<string>We use the camera to scan barcodes and expiration dates.</string>
+<key>CFBundleDisplayName</key>
+<string>PantryScanner</string>
