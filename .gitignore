@@ -8,6 +8,10 @@ xcuserdata/
 
 *.p8
 *.p12
+*.csr
+*.cer
+*.key
+*.pem
 *.mobileprovision
 fastlane/Matchfile
 fastlane/AuthKey_*.p8

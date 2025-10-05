@@ -35,14 +35,7 @@ workflows:
           keychain add-certificates
           xcode-project use-profiles
 
-      # ---------- 3) (Optional) COCOAPODS ----------
-      - name: Install CocoaPods
-        script: |
-          gem install cocoapods --no-document
-          pod repo update
-          pod install
-
-      # ---------- 4) BUILD ----------
+      # ---------- 3) BUILD ----------
       - name: Build IPA
         script: |
           xcode-project build-ipa \
