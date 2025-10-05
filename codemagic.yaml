@@ -46,6 +46,7 @@ workflows:
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
+            --archive-xcargs "PRODUCT_BUNDLE_IDENTIFIER=com.northpadreisles.PantryScanner DEVELOPMENT_TEAM=R8R77PB278 CODE_SIGN_STYLE=Manual"
 
     artifacts:
       - build/ios/ipa/*.ipa
