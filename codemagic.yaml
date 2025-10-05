@@ -8,11 +8,12 @@ workflows:
       app_store_connect: PantryScannerKey
 
     environment:
+      apple_team_id: R8R77PB278
       ios_signing:
         # Allowed: ad_hoc | app_store | development | enterprise
         distribution_type: app_store
         bundle_identifier: com.northpadreisles.PantryScanner
-        apple_team_id: R8R77PB278
+        
       vars:
         # Project & scheme based on your repo/logs
         XCODE_PROJECT: PantryScanner/Pantry.xcodeproj
