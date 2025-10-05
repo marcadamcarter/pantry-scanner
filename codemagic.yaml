@@ -1,3 +1,9 @@
+- name: Diagnose signing inventory
+  script: |
+    echo "Team ID (set this if you're in multiple teams): $APPLE_TEAM_ID"
+    app-store-connect list-certificates --type IOS_DISTRIBUTION || true
+    app-store-connect list-profiles --bundle-id "com.northpadreisles.PantryScanner" --type IOS_APP_STORE || true
+
 workflows:
   pantryscanner_testflight:
     name: PantryScanner – TestFlight
