@@ -4,8 +4,9 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
+        bundle_identifier: com.marc.PantryScanner   # <-- your Bundle ID
       vars:
-        XCODE_PROJECT: PantryScanner/SimpleNews/SimpleNews.xcodeproj
+        XCODE_PROJECT: PantryScanner/SimpleNews.xcodeproj
         XCODE_SCHEME: SimpleNews
     scripts:
       - name: Build archive
@@ -28,5 +29,7 @@ workflows:
       - $CM_BUILD_DIR/app.xcarchive
     publishing:
       app_store_connect:
-        auth: api_key
+        auth: integration            # <-- use the Codemagic integration
         submit_to_testflight: true
+        # beta_groups:
+        #   - Internal Testers
