@@ -4,7 +4,7 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.marc.PantryScanner   # <-- your Bundle ID
+        bundle_identifier: com.northpadreisles.PantryScanner   # <-- your Bundle ID
       vars:
         XCODE_PROJECT: PantryScanner/SimpleNews.xcodeproj
         XCODE_SCHEME: SimpleNews
