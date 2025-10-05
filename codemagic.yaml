@@ -3,129 +3,48 @@ workflows:
     name: PantryScanner - TestFlight
     max_build_duration: 60
 
-    # ⬇️ Make sure this matches the name of your App Store Connect integration in Codemagic
     integrations:
+      # Must match Codemagic → Teams → Integrations
       app_store_connect: PantryScannerKey
 
     environment:
       ios_signing:
-        # Allowed values: ad_hoc | app_store | development | enterprise
+        # Allowed: ad_hoc | app_store | development | enterprise
         distribution_type: app_store
         bundle_identifier: com.northpadreisles.PantryScanner
-        # If you’re in multiple Apple teams, add the next line with your Team ID:
-        # apple_team_id: R8R7RPBZ78
+        apple_team_id: R8R77PB278
       vars:
-        XCODE_PROJECT: PantryScanner/Pantry.xcodeproj     # <-- update to the real path if nested
-        XCODE_SCHEME: SimpleNews                            # keep your scheme name
+        # Project & scheme based on your repo/logs
+        XCODE_PROJECT: PantryScanner/Pantry.xcodeproj
+        XCODE_SCHEME: SimpleNews
         BUNDLE_ID: com.northpadreisles.PantryScanner
 
     scripts:
-      # ---------- 0) HELPER (Helps if paths are wrong) ----------
-      - name: Locate Xcode project/workspace (deep)
-        script: |
-          echo "PWD: $(pwd)"
-          echo "Searching for .xcodeproj / .xcworkspace anywhere…"
-          find . -type d -name "*.xcodeproj" -print
-          find . -type d -name "*.xcworkspace" -print
-          echo "Top-level tree:"
-          ls -la
-
-      # ---------- 1) DIAGNOSTIC (lists what Codemagic can see) ----------
-      - name: Diagnose signing inventory
-        script: |
-          echo "Listing Apple Distribution certs and App Store profiles for $BUNDLE_ID"
-          app-store-connect list-certificates --type IOS_DISTRIBUTION || true
-          app-store-connect list-profiles --bundle-id "$BUNDLE_ID" --type IOS_APP_STORE || true
-          xcodebuild -project "PantryScanner/Pantry.xcodeproj" -scheme "SimpleNews" -showBuildSettings | tee buildsettings.txt
-          BUNDLE=$(awk -F= '/PRODUCT_BUNDLE_IDENTIFIER/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
-          TEAM=$(awk -F= '/DEVELOPMENT_TEAM =/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
-          echo "Detected PRODUCT_BUNDLE_IDENTIFIER: $BUNDLE"
-          echo "Detected DEVELOPMENT_TEAM: $TEAM"
-
-      # ---------- 2) FETCH/CREATE PROFILE & CONFIGURE XCODE ----------
-      - name: Prepare signing (fetch/create App Store profile)
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
-          keychain add-certificates
-          xcode-project use-profiles
-
-      # ---------- 3) DIAGNOSTIC (Verify bundle identifier & team) ----------
       - name: Verify bundle identifier & team
         script: |
-          xcodebuild -project "PantryScanner/Pantry.xcodeproj" -scheme "SimpleNews" -showBuildSettings | tee buildsettings.txt
-          BUNDLE=$(awk -F= '/PRODUCT_BUNDLE_IDENTIFIER/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
+          xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -list
+          xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -showBuildSettings | tee buildsettings.txt
+          BID=$(awk -F= '/PRODUCT_BUNDLE_IDENTIFIER/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
           TEAM=$(awk -F= '/DEVELOPMENT_TEAM =/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
-          echo "Detected PRODUCT_BUNDLE_IDENTIFIER: $BUNDLE"
+          echo "Detected PRODUCT_BUNDLE_IDENTIFIER: $BID"
           echo "Detected DEVELOPMENT_TEAM: $TEAM"
-          test "$BUNDLE" = "com.northpadreisles.PantryScanner" || { echo "❌ Bundle ID mismatch"; exit 1; }
-          test "$TEAM" = "R8R77PB278" || { echo "❌ Team mismatch"; exit 1; }
+          test "$BID" = "$BUNDLE_ID" || { echo "❌ Bundle ID mismatch ($BID != $BUNDLE_ID)"; exit 1; }
+          test "$TEAM" = "R8R77PB278" || { echo "❌ Team mismatch ($TEAM != R8R77PB278)"; exit 1; }
 
-      # ---------- 3) DIAGNOSTIC (Install certs & list profiles) ----------
-      - name: Install certs & list profiles
+      - name: Prepare signing (install certs, ensure App Store profile)
         script: |
           keychain initialize
           keychain add-certificates
-          echo "Available Apple Distribution identities:"
-          security find-identity -v -p codesigning || true
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          xcode-project use-profiles
 
-          echo "Searching for App Store profiles for com.northpadreisles.PantryScanner…"
-          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
-            [ -e "$f" ] || continue
-            PLIST=$(mktemp)
-            security cms -D -i "$f" > "$PLIST" 2>/dev/null || continue
-            BID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PLIST" 2>/dev/null | sed 's/^.*\.//')
-            TYPE=$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$PLIST" 2>/dev/null || echo "")
-            NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PLIST" 2>/dev/null || echo "")
-            UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PLIST" 2>/dev/null || echo "")
-            rm -f "$PLIST"
-            if [ "$BID" = "com.northpadreisles.PantryScanner" ]; then
-              echo "Found profile: $NAME ($UUID)"
-            fi
-          done
-
-      # ---------- 3) DIAGNOSTIC (Ensure App Store profile & select it) ----------
-      - name: Ensure App Store profile & select it
-        script: |
-          # Create/fetch the App Store profile for this bundle id
-          app-store-connect fetch-signing-files "com.northpadreisles.PantryScanner" --type IOS_APP_STORE --create
-
-          # Find the matching profile NAME to pass as PROVISIONING_PROFILE_SPECIFIER
-          PROFILE_NAME=""
-          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
-            [ -e "$f" ] || continue
-            PLIST=$(mktemp)
-            security cms -D -i "$f" > "$PLIST" 2>/dev/null || continue
-            BID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PLIST" 2>/dev/null | sed 's/^.*\.//')
-            NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PLIST" 2>/dev/null || echo "")
-            TYPE=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$PLIST" 2>/dev/null || echo "")
-            rm -f "$PLIST"
-            if [ "$BID" = "com.northpadreisles.PantryScanner" ]; then
-              PROFILE_NAME="$NAME"
-            fi
-          done
-
-          if [ -z "$PROFILE_NAME" ]; then
-            echo "❌ No App Store provisioning profile found for com.northpadreisles.PantryScanner"
-            exit 1
-          fi
-          echo "Using provisioning profile specifier: $PROFILE_NAME"
-          echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" >> $CM_ENV
-
-
-      # ---------- 3) BUILD ----------
       - name: Build IPA
         script: |
-          echo "Using project: $XCODE_PROJECT"
-          echo "Using PROVISIONING_PROFILE_SPECIFIER: ${PROVISIONING_PROFILE_SPECIFIER}"
-          echo "Listing schemes to verify:"
-          xcodebuild -list -project "$XCODE_PROJECT" || true
-
+          echo "Project: $XCODE_PROJECT"
+          echo "Scheme:  $XCODE_SCHEME"
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
-            --archive-xcargs "PROVISIONING_PROFILE_SPECIFIER=${PROVISIONING_PROFILE_SPECIFIER} DEVELOPMENT_TEAM=R8R77PB278 CODE_SIGN_STYLE=Manual"
-
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -135,5 +54,3 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        # beta_groups:
-        #   - Internal Testers
