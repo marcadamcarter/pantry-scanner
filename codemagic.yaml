@@ -50,18 +50,82 @@ workflows:
           keychain add-certificates
           xcode-project use-profiles
 
+      # ---------- 3) DIAGNOSTIC (Verify bundle identifier & team) ----------
+      - name: Verify bundle identifier & team
+        script: |
+          xcodebuild -project "PantryScanner/Pantry.xcodeproj" -scheme "SimpleNews" -showBuildSettings | tee buildsettings.txt
+          BUNDLE=$(awk -F= '/PRODUCT_BUNDLE_IDENTIFIER/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
+          TEAM=$(awk -F= '/DEVELOPMENT_TEAM =/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt)
+          echo "Detected PRODUCT_BUNDLE_IDENTIFIER: $BUNDLE"
+          echo "Detected DEVELOPMENT_TEAM: $TEAM"
+          test "$BUNDLE" = "com.northpadreisles.PantryScanner" || { echo "❌ Bundle ID mismatch"; exit 1; }
+          test "$TEAM" = "R8R77PB278" || { echo "❌ Team mismatch"; exit 1; }
+
+      # ---------- 3) DIAGNOSTIC (Install certs & list profiles) ----------
+      - name: Install certs & list profiles
+        script: |
+          keychain initialize
+          keychain add-certificates
+          echo "Available Apple Distribution identities:"
+          security find-identity -v -p codesigning || true
+
+          echo "Searching for App Store profiles for com.northpadreisles.PantryScanner…"
+          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+            [ -e "$f" ] || continue
+            PLIST=$(mktemp)
+            security cms -D -i "$f" > "$PLIST" 2>/dev/null || continue
+            BID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PLIST" 2>/dev/null | sed 's/^.*\.//')
+            TYPE=$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$PLIST" 2>/dev/null || echo "")
+            NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PLIST" 2>/dev/null || echo "")
+            UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PLIST" 2>/dev/null || echo "")
+            rm -f "$PLIST"
+            if [ "$BID" = "com.northpadreisles.PantryScanner" ]; then
+              echo "Found profile: $NAME ($UUID)"
+            fi
+          done
+
+      # ---------- 3) DIAGNOSTIC (Ensure App Store profile & select it) ----------
+      - name: Ensure App Store profile & select it
+        script: |
+          # Create/fetch the App Store profile for this bundle id
+          app-store-connect fetch-signing-files "com.northpadreisles.PantryScanner" --type IOS_APP_STORE --create
+
+          # Find the matching profile NAME to pass as PROVISIONING_PROFILE_SPECIFIER
+          PROFILE_NAME=""
+          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+            [ -e "$f" ] || continue
+            PLIST=$(mktemp)
+            security cms -D -i "$f" > "$PLIST" 2>/dev/null || continue
+            BID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PLIST" 2>/dev/null | sed 's/^.*\.//')
+            NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PLIST" 2>/dev/null || echo "")
+            TYPE=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$PLIST" 2>/dev/null || echo "")
+            rm -f "$PLIST"
+            if [ "$BID" = "com.northpadreisles.PantryScanner" ]; then
+              PROFILE_NAME="$NAME"
+            fi
+          done
+
+          if [ -z "$PROFILE_NAME" ]; then
+            echo "❌ No App Store provisioning profile found for com.northpadreisles.PantryScanner"
+            exit 1
+          fi
+          echo "Using provisioning profile specifier: $PROFILE_NAME"
+          echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" >> $CM_ENV
+
+
       # ---------- 3) BUILD ----------
       - name: Build IPA
         script: |
           echo "Using project: $XCODE_PROJECT"
-          echo "Using scheme:  $XCODE_SCHEME"
-
+          echo "Using PROVISIONING_PROFILE_SPECIFIER: ${PROVISIONING_PROFILE_SPECIFIER}"
           echo "Listing schemes to verify:"
           xcodebuild -list -project "$XCODE_PROJECT" || true
 
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
+            --archive-xcargs "PROVISIONING_PROFILE_SPECIFIER=${PROVISIONING_PROFILE_SPECIFIER} DEVELOPMENT_TEAM=R8R77PB278 CODE_SIGN_STYLE=Manual"
+
 
     artifacts:
       - build/ios/ipa/*.ipa
