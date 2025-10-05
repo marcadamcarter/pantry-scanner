@@ -5,8 +5,7 @@ workflows:
 
     integrations:
       # Must match Codemagic → Teams → Integrations
-      app_store_connect: PantryScannerKey
-      apple_team_id: R8R77PB278
+      app_store_connect: PantryScannerKey      
 
     environment:
       ios_signing:
@@ -19,6 +18,7 @@ workflows:
         XCODE_PROJECT: PantryScanner/Pantry.xcodeproj
         XCODE_SCHEME: SimpleNews
         BUNDLE_ID: com.northpadreisles.PantryScanner        
+        #apple_team_id: R8R77PB278
 
     scripts:
       - name: Verify bundle identifier & team
