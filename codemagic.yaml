@@ -2,35 +2,40 @@ workflows:
   pantryscanner_testflight:
     name: PantryScanner – TestFlight
     max_build_duration: 60
+
     integrations:
-      # 👇 This MUST match the integration name you see in Codemagic > Teams > Integrations
-      app_store_connect: PantryScanner ASC Key
+      # Must match the integration name in Codemagic > Teams > Integrations
+      app_store_connect: PantryScannerKey
+
     environment:
       ios_signing:
-        distribution_type: app-store
+        # Allowed values: ad_hoc | app_store | development | enterprise
+        distribution_type: app_store
         bundle_identifier: com.northpadreisles.PantryScanner
       vars:
         XCODE_WORKSPACE: PantryScanner.xcworkspace
         XCODE_SCHEME: PantryScanner
+
     scripts:
-      - name: Set up CocoaPods
+      - name: Install CocoaPods
         script: |
           gem install cocoapods --no-document
           pod repo update
           pod install
-      - name: Xcode build (archive)
+      - name: Build IPA
         script: |
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME"
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
+
     publishing:
       app_store_connect:
-        # 👇 Using the workflow-level integration above
         auth: integration
         submit_to_testflight: true
-        # Optional: auto-assign to groups you’ve set up in App Store Connect
-        beta_groups:
-          - Internal Testers
+        # Optional: auto-assign to groups in App Store Connect
+        # beta_groups:
+        #   - Internal Testers
