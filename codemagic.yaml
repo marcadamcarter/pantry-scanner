@@ -40,6 +40,40 @@ workflows:
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
           xcode-project use-profiles
 
+      - name: Ensure App Store profile & export specifier
+        script: |
+          set -euo pipefail
+          BUNDLE_ID="com.northpadreisles.PantryScanner"
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+
+          PROFILE_NAME=""
+          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+            [ -e "$f" ] || continue
+            PLIST=$(mktemp)
+            security cms -D -i "$f" > "$PLIST" 2>/dev/null || { rm -f "$PLIST"; continue; }
+            APPID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PLIST" 2>/dev/null || echo "")
+            NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PLIST" 2>/dev/null || echo "")
+            GETTASK=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$PLIST" 2>/dev/null || echo "")
+            rm -f "$PLIST"
+
+            if [ "${APPID##*.}" = "$BUNDLE_ID" ] && [ "$GETTASK" = "false" ]; then
+              PROFILE_NAME="$NAME"
+            fi
+          done
+
+          if [ -z "$PROFILE_NAME" ]; then
+            echo "❌ No App Store provisioning profile found for $BUNDLE_ID"
+            exit 1
+          fi
+
+          echo "Using provisioning profile: $PROFILE_NAME"
+          echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" >> "$CM_ENV"
+
+          keychain initialize
+          keychain add-certificates
+          xcode-project use-profiles
+
+
       - name: Build IPA
         script: |
           echo "Project: $XCODE_PROJECT"
