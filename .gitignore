@@ -5,3 +5,12 @@ xcuserdata/
 *.pbxuser
 !default.pbxuser
 .build/
+
+*.p8
+*.p12
+*.mobileprovision
+fastlane/Matchfile
+fastlane/AuthKey_*.p8
+.env
+**/Secrets.xcconfig
+**/*.keystore

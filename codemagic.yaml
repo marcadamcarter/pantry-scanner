@@ -4,24 +4,34 @@ workflows:
     max_build_duration: 60
 
     integrations:
-      # Must match the integration name in Codemagic > Teams > Integrations
+      # Must match Codemagic → Teams → Integrations
       app_store_connect: PantryScannerKey
 
     environment:
       ios_signing:
-        # Allowed values: ad_hoc | app_store | development | enterprise
+        # Allowed: ad_hoc | app_store | development | enterprise
         distribution_type: app_store
         bundle_identifier: com.northpadreisles.PantryScanner
+        # apple_team_id: ABCDE12345   # uncomment if you’re in multiple teams
       vars:
         XCODE_WORKSPACE: PantryScanner.xcworkspace
         XCODE_SCHEME: PantryScanner
+        BUNDLE_ID: com.northpadreisles.PantryScanner
 
     scripts:
+      - name: Prepare signing (fetch/create App Store profile)
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
+
       - name: Install CocoaPods
         script: |
           gem install cocoapods --no-document
           pod repo update
           pod install
+
       - name: Build IPA
         script: |
           xcode-project build-ipa \
@@ -36,6 +46,5 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        # Optional: auto-assign to groups in App Store Connect
         # beta_groups:
         #   - Internal Testers
