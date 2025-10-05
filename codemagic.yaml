@@ -16,7 +16,7 @@ workflows:
         # apple_team_id: R8R7RPBZ78
       vars:
         XCODE_PROJECT: PantryScanner/Pantry.xcodeproj     # <-- update to the real path if nested
-        XCODE_SCHEME: PantryScanner                 # keep your scheme name
+        XCODE_SCHEME: SimpleNews                            # keep your scheme name
         BUNDLE_ID: com.northpadreisles.PantryScanner
 
     scripts:
