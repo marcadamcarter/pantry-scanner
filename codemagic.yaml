@@ -24,8 +24,6 @@ workflows:
       - name: Install certs & profiles
         script: |
           set -e
-          BUNDLE_ID="com.northpadreisles.PantryScanner"
-          
           keychain initialize
           keychain add-certificates
           
@@ -34,44 +32,6 @@ workflows:
           
           # Install any uploaded provisioning profiles into the local build environment
           xcode-project use-profiles
-
-      - name: Resolve provisioning profile UUID by name
-        script: |
-          set -e
-          echo "Looking for profile named: $PROFILE_NAME"
-
-          PROFILE_UUID=""
-          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
-            [ -e "$f" ] || continue
-            PLIST=$(mktemp)
-            security cms -D -i "$f" > "$PLIST" 2>/dev/null || { rm -f "$PLIST"; continue; }
-            NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PLIST" 2>/dev/null || echo "")
-            UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PLIST" 2>/dev/null || echo "")
-            APPID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PLIST" 2>/dev/null || echo "")
-            GETTASK=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$PLIST" 2>/dev/null || echo "")
-            rm -f "$PLIST"
-
-            # Must be distribution (get-task-allow=false) and match your bundle id
-            if [ "$NAME" = "$PROFILE_NAME" ] && [ "${APPID##*.}" = "com.northpadreisles.PantryScanner" ] && [ "$GETTASK" = "false" ]; then
-              PROFILE_UUID="$UUID"
-              break
-            fi
-          done
-          
-          echo "Found profile UUID: $PROFILE_UUID"
-
-          if [ -z "$PROFILE_UUID" ]; then
-            echo "❌ Could not find App Store profile named '$PROFILE_NAME' for com.northpadreisles.PantryScanner"
-            echo "Make sure that exact profile exists in Codemagic → Teams → Code signing identities → iOS provisioning profiles."
-            exit 1
-          fi
-
-          echo "Using provisioning profile:"
-          echo "  Name: $PROFILE_NAME"
-          echo "  UUID: $PROFILE_UUID"
-
-          echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" >> "$CM_ENV"
-          echo "PROVISIONING_PROFILE=$PROFILE_UUID" >> "$CM_ENV"
 
       - name: Build IPA (force matching profile + identity + bundle id)
         script: |
