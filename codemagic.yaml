@@ -24,15 +24,20 @@ workflows:
       - name: Install certs & profiles
         script: |
           set -e
+          BUNDLE_ID="com.northpadreisles.PantryScanner"
+          
           keychain initialize
           keychain add-certificates
+          
+          # Download (or create if missing) the App Store profile for this bundle id
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          
           # Install any uploaded provisioning profiles into the local build environment
           xcode-project use-profiles
 
       - name: Resolve provisioning profile UUID by name
         script: |
           set -e
-          PROFILE_NAME="PantryScanner_AppStore_Profile"   # <- EXACT name from your screenshot
           echo "Looking for profile named: $PROFILE_NAME"
 
           PROFILE_UUID=""
@@ -52,6 +57,8 @@ workflows:
               break
             fi
           done
+          
+          echo "Found profile UUID: $PROFILE_UUID"
 
           if [ -z "$PROFILE_UUID" ]; then
             echo "❌ Could not find App Store profile named '$PROFILE_NAME' for com.northpadreisles.PantryScanner"
