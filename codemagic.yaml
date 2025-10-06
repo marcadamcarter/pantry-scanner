@@ -21,33 +21,57 @@ workflows:
         PROFILE_NAME: PantryScanner_AppStore_Profile         # <-- exactly as shown in Codemagic UI
 
     scripts:
-      - name: Verify bundle identifier & team (non-blocking)
-        script: |
-          xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -showBuildSettings | tee buildsettings.txt
-          BID=$(awk -F= '/PRODUCT_BUNDLE_IDENTIFIER/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt || true)
-          TEAM=$(awk -F= '/DEVELOPMENT_TEAM =/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' buildsettings.txt || true)
-          echo "Detected PRODUCT_BUNDLE_IDENTIFIER: ${BID:-<none>}"
-          echo "Detected DEVELOPMENT_TEAM: ${TEAM:-<none>}"
-          if [ "$BID" != "com.northpadreisles.PantryScanner" ]; then
-            echo "⚠️  Bundle ID in project is '$BID'. We'll override it during archive."
-          fi
-
-
-      - name: Prepare signing (install certs, ensure App Store profile)
+      - name: Install certs & profiles
         script: |
           set -e
           keychain initialize
           keychain add-certificates
+          # Install any uploaded provisioning profiles into the local build environment
           xcode-project use-profiles
 
-      - name: Build IPA
+      - name: Resolve provisioning profile UUID by name
         script: |
-          echo "Project: $XCODE_PROJECT"
-          echo "Scheme:  $XCODE_SCHEME"
+          set -e
+          PROFILE_NAME="PantryScanner_AppStore_Profile"   # <- EXACT name from your screenshot
+          echo "Looking for profile named: $PROFILE_NAME"
+
+          PROFILE_UUID=""
+          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+            [ -e "$f" ] || continue
+            PLIST=$(mktemp)
+            security cms -D -i "$f" > "$PLIST" 2>/dev/null || { rm -f "$PLIST"; continue; }
+            NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PLIST" 2>/dev/null || echo "")
+            UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PLIST" 2>/dev/null || echo "")
+            APPID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PLIST" 2>/dev/null || echo "")
+            GETTASK=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$PLIST" 2>/dev/null || echo "")
+            rm -f "$PLIST"
+
+            # Must be distribution (get-task-allow=false) and match your bundle id
+            if [ "$NAME" = "$PROFILE_NAME" ] && [ "${APPID##*.}" = "com.northpadreisles.PantryScanner" ] && [ "$GETTASK" = "false" ]; then
+              PROFILE_UUID="$UUID"
+              break
+            fi
+          done
+
+          if [ -z "$PROFILE_UUID" ]; then
+            echo "❌ Could not find App Store profile named '$PROFILE_NAME' for com.northpadreisles.PantryScanner"
+            echo "Make sure that exact profile exists in Codemagic → Teams → Code signing identities → iOS provisioning profiles."
+            exit 1
+          fi
+
+          echo "Using provisioning profile:"
+          echo "  Name: $PROFILE_NAME"
+          echo "  UUID: $PROFILE_UUID"
+
+          echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" >> "$CM_ENV"
+          echo "PROVISIONING_PROFILE=$PROFILE_UUID" >> "$CM_ENV"
+
+      - name: Build IPA (force matching profile + identity + bundle id)
+        script: |
           xcode-project build-ipa \
-            --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME" \
-            --archive-xcargs "PRODUCT_BUNDLE_IDENTIFIER=com.northpadreisles.PantryScanner DEVELOPMENT_TEAM=R8R77PB278 CODE_SIGN_STYLE=Manual"
+            --project "PantryScanner/Pantry.xcodeproj" \
+            --scheme "SimpleNews" \
+            --archive-xcargs "PRODUCT_BUNDLE_IDENTIFIER=com.northpadreisles.PantryScanner DEVELOPMENT_TEAM=R8R77PB278 CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER='${PROVISIONING_PROFILE_SPECIFIER}' PROVISIONING_PROFILE='${PROVISIONING_PROFILE}' CODE_SIGN_IDENTITY='Apple Distribution'"
 
     artifacts:
       - build/ios/ipa/*.ipa
