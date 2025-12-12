@@ -84,16 +84,34 @@ enum DateParser {
     }
 }
 
-// MARK: - Barcode Lookup (stub)
+// MARK: - Barcode Lookup (Open Food Facts API)
 actor BarcodeLookupService {
     struct Product: Codable { let name: String; let brand: String?; let size: String? }
 
     private var cache: [String: Product] = [:]
 
+    // Open Food Facts API response structures
+    private struct OFFResponse: Codable {
+        let status: Int
+        let product: OFFProduct?
+    }
+
+    private struct OFFProduct: Codable {
+        let product_name: String?
+        let brands: String?
+        let quantity: String?
+    }
+
     func lookup(code: String) async -> Product? {
         if let cached = cache[code] { return cached }
-        // TODO: Integrate Open Food Facts or your preferred API.
-        // For now, return some mocked data patterns so you can demo quickly.
+
+        // Try Open Food Facts API
+        if let product = await fetchFromOpenFoodFacts(code: code) {
+            cache[code] = product
+            return product
+        }
+
+        // Fallback to mocked data for demo/testing
         let mocked: [String: Product] = [
             "012345678905": .init(name: "Tomato Soup", brand: "Acme", size: "10.75 oz"),
             "041898123456": .init(name: "Pasta Shells", brand: "Casa Viva", size: "16 oz"),
@@ -102,6 +120,94 @@ actor BarcodeLookupService {
         if let m = mocked[code] { cache[code] = m; return m }
         return nil
     }
+
+    private func fetchFromOpenFoodFacts(code: String) async -> Product? {
+        guard let url = URL(string: "https://world.openfoodfacts.org/api/v2/product/\(code).json") else { return nil }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { return nil }
+
+            let decoder = JSONDecoder()
+            let offResponse = try decoder.decode(OFFResponse.self, from: data)
+
+            guard offResponse.status == 1, let product = offResponse.product else { return nil }
+
+            let name = product.product_name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let brand = product.brands?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let size = product.quantity?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard let name = name, !name.isEmpty else { return nil }
+
+            return Product(name: name, brand: brand, size: size)
+        } catch {
+            print("Open Food Facts lookup failed: \(error)")
+            return nil
+        }
+    }
+}
+
+// MARK: - Notification Manager
+import UserNotifications
+
+@MainActor
+class NotificationManager: ObservableObject {
+    static let shared = NotificationManager()
+
+    @Published var isAuthorized = false
+
+    private init() {
+        Task { await checkAuthorization() }
+    }
+
+    func requestAuthorization() async {
+        do {
+            isAuthorized = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+        } catch {
+            print("Notification authorization failed: \(error)")
+        }
+    }
+
+    func checkAuthorization() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        isAuthorized = settings.authorizationStatus == .authorized
+    }
+
+    func scheduleExpirationNotifications(for item: Item) async {
+        guard isAuthorized else { return }
+
+        // Cancel existing notifications for this item
+        let identifier = "item-\(item.id.uuidString)"
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
+
+        // Find soonest expiration
+        guard let soonestExpiration = item.lots.compactMap({ $0.expirationDate }).sorted().first else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Item Expiring Soon"
+        content.body = "\(item.name) expires on \(soonestExpiration.formatted(date: .abbreviated, time: .omitted))"
+        content.sound = .default
+
+        // Schedule notification 3 days before expiration
+        let triggerDate = Calendar.current.date(byAdding: .day, value: -3, to: soonestExpiration) ?? soonestExpiration
+
+        if triggerDate > Date() {
+            let components = Calendar.current.dateComponents([.year, .month, .day, .hour], from: triggerDate)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+            } catch {
+                print("Failed to schedule notification: \(error)")
+            }
+        }
+    }
+
+    func cancelNotifications(for item: Item) {
+        let identifier = "item-\(item.id.uuidString)"
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
+    }
 }
 
 // MARK: - Scanner (VisionKit)
@@ -109,16 +215,27 @@ struct ScannerView: UIViewControllerRepresentable {
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
         var onBarcode: (String) -> Void
         var onDate: (Date) -> Void
+        private let haptic = UINotificationFeedbackGenerator()
+
         init(onBarcode: @escaping (String)->Void, onDate: @escaping (Date)->Void) {
             self.onBarcode = onBarcode; self.onDate = onDate
+            super.init()
+            haptic.prepare()
         }
+
         func dataScanner(_ scanner: DataScannerViewController, didAdd addedItems: [RecognizedItem], allItems: [RecognizedItem]) {
             for item in addedItems {
                 switch item {
                 case .barcode(let code):
-                    if let payload = code.payloadStringValue { onBarcode(payload) }
+                    if let payload = code.payloadStringValue {
+                        haptic.notificationOccurred(.success)
+                        onBarcode(payload)
+                    }
                 case .text(let text):
-                    if let date = DateParser.parseFirstDate(in: text.transcript) { onDate(date) }
+                    if let date = DateParser.parseFirstDate(in: text.transcript) {
+                        haptic.notificationOccurred(.success)
+                        onDate(date)
+                    }
                 default: break
                 }
             }
@@ -226,7 +343,11 @@ struct InventoryView: View {
     }
 
     private func delete(at offsets: IndexSet) {
-        for i in offsets { ctx.delete(items[i]) }
+        for i in offsets {
+            let item = items[i]
+            NotificationManager.shared.cancelNotifications(for: item)
+            ctx.delete(item)
+        }
         try? ctx.save()
     }
 }
@@ -308,6 +429,12 @@ struct AddItemView: View {
         if expDate != nil { item.lots.append(Lot(expirationDate: expDate)) }
         ctx.insert(item)
         try? ctx.save()
+
+        // Schedule notification if we have an expiration date
+        if expDate != nil {
+            Task { await NotificationManager.shared.scheduleExpirationNotifications(for: item) }
+        }
+
         dismiss()
     }
 }
@@ -336,15 +463,141 @@ struct ItemDetailView: View {
                     HStack {
                         Text(lot.expirationDate?.formatted(date: .abbreviated, time: .omitted) ?? "—")
                         Spacer()
-                        Button(role: .destructive) { ctx.delete(lot); try? ctx.save() } label: { Image(systemName: "trash") }
+                        Button(role: .destructive) {
+                            ctx.delete(lot)
+                            try? ctx.save()
+                            Task { await NotificationManager.shared.scheduleExpirationNotifications(for: item) }
+                        } label: { Image(systemName: "trash") }
                     }
                 }
                 DatePicker("New expiration", selection: $newExp, displayedComponents: .date)
-                Button("Add lot") { item.lots.append(Lot(expirationDate: newExp, item: item)); try? ctx.save() }
+                Button("Add lot") {
+                    item.lots.append(Lot(expirationDate: newExp, item: item))
+                    try? ctx.save()
+                    Task { await NotificationManager.shared.scheduleExpirationNotifications(for: item) }
+                }
             }
         }
         .navigationTitle(item.name.isEmpty ? "Item" : item.name)
         .onDisappear { try? ctx.save() }
+    }
+}
+
+struct ExpiringSoonView: View {
+    @Environment(\.modelContext) private var ctx
+    @Query(sort: \Item.updatedAt, order: .reverse) private var allItems: [Item]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                let expiring = expiringItems
+                if expiring.isEmpty {
+                    ContentUnavailableView(
+                        "No Items Expiring Soon",
+                        systemImage: "checkmark.circle",
+                        description: Text("All items are fresh! Check back later.")
+                    )
+                } else {
+                    ForEach(expiring) { item in
+                        NavigationLink(value: item.id) {
+                            HStack(alignment: .top, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.name.isEmpty ? "(Unnamed Item)" : item.name)
+                                        .font(.headline)
+                                    HStack(spacing: 8) {
+                                        if let brand = item.brand, !brand.isEmpty { Text(brand).foregroundStyle(.secondary) }
+                                        if let size = item.size, !size.isEmpty { Text(size).foregroundStyle(.secondary) }
+                                    }
+                                    if let exp = soonestExpiration(for: item) {
+                                        let days = daysUntilExpiration(exp)
+                                        HStack(spacing: 4) {
+                                            Image(systemName: days < 0 ? "exclamationmark.triangle.fill" : "clock.fill")
+                                                .foregroundStyle(colorFor(expiration: exp))
+                                                .font(.caption)
+                                            Text(expirationText(for: exp))
+                                                .font(.subheadline)
+                                                .foregroundStyle(colorFor(expiration: exp))
+                                        }
+                                    }
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing) {
+                                    Text("Qty: \(item.qtyOnHand)").bold()
+                                    Text(item.location).font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Expiring Soon")
+            .navigationDestination(for: UUID.self) { id in
+                if let item = allItems.first(where: { $0.id == id }) {
+                    ItemDetailView(item: item)
+                }
+            }
+        }
+    }
+
+    private var expiringItems: [Item] {
+        let sevenDaysFromNow = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
+        return allItems
+            .filter { item in
+                guard let exp = soonestExpiration(for: item) else { return false }
+                return exp <= sevenDaysFromNow
+            }
+            .sorted { item1, item2 in
+                let exp1 = soonestExpiration(for: item1) ?? .distantFuture
+                let exp2 = soonestExpiration(for: item2) ?? .distantFuture
+                return exp1 < exp2
+            }
+    }
+
+    private func soonestExpiration(for item: Item) -> Date? {
+        item.lots.compactMap { $0.expirationDate }.sorted().first
+    }
+
+    private func daysUntilExpiration(_ date: Date) -> Int {
+        Calendar.current.dateComponents([.day], from: .now, to: date).day ?? 0
+    }
+
+    private func expirationText(for date: Date) -> String {
+        let days = daysUntilExpiration(date)
+        if days < 0 { return "Expired \(abs(days)) day\(abs(days) == 1 ? "" : "s") ago" }
+        if days == 0 { return "Expires today!" }
+        if days == 1 { return "Expires tomorrow" }
+        return "Expires in \(days) days"
+    }
+
+    private func colorFor(expiration: Date) -> Color {
+        let days = daysUntilExpiration(expiration)
+        if days < 0 { return .red }
+        if days <= 3 { return .orange }
+        return .yellow
+    }
+}
+
+// MARK: - Main Tab View
+struct MainTabView: View {
+    @StateObject private var notificationManager = NotificationManager.shared
+
+    var body: some View {
+        TabView {
+            InventoryView()
+                .tabItem {
+                    Label("Pantry", systemImage: "basket")
+                }
+
+            ExpiringSoonView()
+                .tabItem {
+                    Label("Expiring Soon", systemImage: "clock.badge.exclamationmark")
+                }
+        }
+        .task {
+            if !notificationManager.isAuthorized {
+                await notificationManager.requestAuthorization()
+            }
+        }
     }
 }
 
@@ -353,7 +606,7 @@ struct ItemDetailView: View {
 struct PantryScannerApp: App {
     var body: some Scene {
         WindowGroup {
-            InventoryView()
+            MainTabView()
         }
         .modelContainer(for: [Item.self, Lot.self])
     }
