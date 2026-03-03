@@ -8,25 +8,15 @@
 
 /* Begin PBXBuildFile section */
 		51F228AF2843D08F009482EF /* SimpleNewsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F228AE2843D08F009482EF /* SimpleNewsApp.swift */; };
-		51F228B12843D08F009482EF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F228B02843D08F009482EF /* ContentView.swift */; };
 		51F228B32843D090009482EF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 51F228B22843D090009482EF /* Assets.xcassets */; };
 		51F228B62843D090009482EF /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 51F228B52843D090009482EF /* Preview Assets.xcassets */; };
-		51F228BD2843D0B9009482EF /* Article.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F228BC2843D0B9009482EF /* Article.swift */; };
-		51F228BF2843D3DD009482EF /* SelectSomethingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F228BE2843D3DD009482EF /* SelectSomethingView.swift */; };
-		51F228C12843D74D009482EF /* ArticleRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F228C02843D74D009482EF /* ArticleRow.swift */; };
-		51F228C32843D8D9009482EF /* ReadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F228C22843D8D9009482EF /* ReadingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		51F228AB2843D08F009482EF /* SimpleNews.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SimpleNews.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		51F228AE2843D08F009482EF /* SimpleNewsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleNewsApp.swift; sourceTree = "<group>"; };
-		51F228B02843D08F009482EF /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		51F228B22843D090009482EF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		51F228B52843D090009482EF /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		51F228BC2843D0B9009482EF /* Article.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Article.swift; sourceTree = "<group>"; };
-		51F228BE2843D3DD009482EF /* SelectSomethingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectSomethingView.swift; sourceTree = "<group>"; };
-		51F228C02843D74D009482EF /* ArticleRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleRow.swift; sourceTree = "<group>"; };
-		51F228C22843D8D9009482EF /* ReadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,11 +50,6 @@
 			isa = PBXGroup;
 			children = (
 				51F228AE2843D08F009482EF /* SimpleNewsApp.swift */,
-				51F228B02843D08F009482EF /* ContentView.swift */,
-				51F228C22843D8D9009482EF /* ReadingView.swift */,
-				51F228BE2843D3DD009482EF /* SelectSomethingView.swift */,
-				51F228C02843D74D009482EF /* ArticleRow.swift */,
-				51F228BC2843D0B9009482EF /* Article.swift */,
 				51F228B22843D090009482EF /* Assets.xcassets */,
 				51F228B42843D090009482EF /* Preview Content */,
 			);
@@ -171,12 +156,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				51F228C12843D74D009482EF /* ArticleRow.swift in Sources */,
-				51F228B12843D08F009482EF /* ContentView.swift in Sources */,
-				51F228BF2843D3DD009482EF /* SelectSomethingView.swift in Sources */,
-				51F228C32843D8D9009482EF /* ReadingView.swift in Sources */,
 				51F228AF2843D08F009482EF /* SimpleNewsApp.swift in Sources */,
-				51F228BD2843D0B9009482EF /* Article.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

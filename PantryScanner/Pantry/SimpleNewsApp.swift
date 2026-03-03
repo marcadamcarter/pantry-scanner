@@ -1,4 +1,4 @@
-// Pantry Scanner Starter
+// Pantry Scanner
 // iOS 17+, SwiftUI + VisionKit (DataScanner) + SwiftData
 // Notes: Add the following to Info.plist:
 //  - Privacy - Camera Usage Description (NSCameraUsageDescription): "We use the camera to scan barcodes and expiration dates."
@@ -7,6 +7,7 @@
 import SwiftUI
 import VisionKit
 import SwiftData
+import UserNotifications
 
 // MARK: - Models (SwiftData)
 @Model
@@ -84,23 +85,94 @@ enum DateParser {
     }
 }
 
-// MARK: - Barcode Lookup (stub)
+// MARK: - Barcode Lookup (Open Food Facts)
 actor BarcodeLookupService {
-    struct Product: Codable { let name: String; let brand: String?; let size: String? }
+    struct Product { let name: String; let brand: String?; let size: String? }
 
     private var cache: [String: Product] = [:]
 
     func lookup(code: String) async -> Product? {
         if let cached = cache[code] { return cached }
-        // TODO: Integrate Open Food Facts or your preferred API.
-        // For now, return some mocked data patterns so you can demo quickly.
-        let mocked: [String: Product] = [
-            "012345678905": .init(name: "Tomato Soup", brand: "Acme", size: "10.75 oz"),
-            "041898123456": .init(name: "Pasta Shells", brand: "Casa Viva", size: "16 oz"),
-            "071234500001": .init(name: "Whole Milk", brand: "Lone Star", size: "1 gal")
-        ]
-        if let m = mocked[code] { cache[code] = m; return m }
-        return nil
+
+        guard let url = URL(string: "https://world.openfoodfacts.org/api/v2/product/\(code).json") else { return nil }
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  json["status"] as? Int == 1,
+                  let productDict = json["product"] as? [String: Any] else {
+                return nil
+            }
+
+            let name = productDict["product_name"] as? String
+            guard let name, !name.isEmpty else { return nil }
+
+            let brand = productDict["brands"] as? String
+            let quantity = productDict["quantity"] as? String
+
+            let product = Product(name: name, brand: brand, size: quantity)
+            cache[code] = product
+            return product
+        } catch {
+            return nil
+        }
+    }
+}
+
+// MARK: - Notification Manager
+final class NotificationManager {
+    static let shared = NotificationManager()
+    private let center = UNUserNotificationCenter.current()
+
+    func requestPermission() {
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    func scheduleNotifications(for item: Item) {
+        let itemName = item.name.isEmpty ? "Item" : item.name
+        for lot in item.lots {
+            guard let exp = lot.expirationDate else { continue }
+            schedule(itemID: item.id, lotID: lot.id, itemName: itemName, expirationDate: exp, daysBefore: 3,
+                     body: "⏰ \(itemName) expires in 3 days")
+            schedule(itemID: item.id, lotID: lot.id, itemName: itemName, expirationDate: exp, daysBefore: 0,
+                     body: "🚨 \(itemName) expires today!")
+        }
+    }
+
+    func cancelNotifications(for item: Item) {
+        let prefix = "pantry-\(item.id.uuidString)"
+        center.getPendingNotificationRequests { requests in
+            let ids = requests.map(\.identifier).filter { $0.hasPrefix(prefix) }
+            self.center.removePendingNotificationRequests(withIdentifiers: ids)
+        }
+    }
+
+    func rescheduleAll(items: [Item]) {
+        center.removeAllPendingNotificationRequests()
+        for item in items {
+            scheduleNotifications(for: item)
+        }
+    }
+
+    private func schedule(itemID: UUID, lotID: UUID, itemName: String, expirationDate: Date, daysBefore: Int, body: String) {
+        guard let targetDate = Calendar.current.date(byAdding: .day, value: -daysBefore, to: expirationDate) else { return }
+
+        // Don't schedule notifications in the past
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: targetDate)
+        components.hour = 9
+        components.minute = 0
+
+        if let fireDate = Calendar.current.date(from: components), fireDate <= .now { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Pantry Scanner"
+        content.body = body
+        content.sound = .default
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let identifier = "pantry-\(itemID.uuidString)-\(lotID.uuidString)-\(daysBefore)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        center.add(request)
     }
 }
 
@@ -193,7 +265,7 @@ struct InventoryView: View {
                 }
             }
             .navigationTitle("Pantry")
-            .searchable(text: $search, prompt: "Search ‘milk’, ‘soup’, barcode…")
+            .searchable(text: $search, prompt: "Search 'milk', 'soup', barcode…")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button { showAdd = true } label: { Image(systemName: "plus") } }
             }
@@ -226,7 +298,10 @@ struct InventoryView: View {
     }
 
     private func delete(at offsets: IndexSet) {
-        for i in offsets { ctx.delete(items[i]) }
+        for i in offsets {
+            NotificationManager.shared.cancelNotifications(for: items[i])
+            ctx.delete(items[i])
+        }
         try? ctx.save()
     }
 }
@@ -308,6 +383,7 @@ struct AddItemView: View {
         if expDate != nil { item.lots.append(Lot(expirationDate: expDate)) }
         ctx.insert(item)
         try? ctx.save()
+        NotificationManager.shared.scheduleNotifications(for: item)
         dismiss()
     }
 }
@@ -336,11 +412,21 @@ struct ItemDetailView: View {
                     HStack {
                         Text(lot.expirationDate?.formatted(date: .abbreviated, time: .omitted) ?? "—")
                         Spacer()
-                        Button(role: .destructive) { ctx.delete(lot); try? ctx.save() } label: { Image(systemName: "trash") }
+                        Button(role: .destructive) {
+                            ctx.delete(lot)
+                            try? ctx.save()
+                            NotificationManager.shared.cancelNotifications(for: item)
+                            NotificationManager.shared.scheduleNotifications(for: item)
+                        } label: { Image(systemName: "trash") }
                     }
                 }
                 DatePicker("New expiration", selection: $newExp, displayedComponents: .date)
-                Button("Add lot") { item.lots.append(Lot(expirationDate: newExp, item: item)); try? ctx.save() }
+                Button("Add lot") {
+                    item.lots.append(Lot(expirationDate: newExp, item: item))
+                    try? ctx.save()
+                    NotificationManager.shared.cancelNotifications(for: item)
+                    NotificationManager.shared.scheduleNotifications(for: item)
+                }
             }
         }
         .navigationTitle(item.name.isEmpty ? "Item" : item.name)
@@ -351,10 +437,22 @@ struct ItemDetailView: View {
 // MARK: - App Entry
 @main
 struct PantryScannerApp: App {
+    let container: ModelContainer
+
+    init() {
+        container = try! ModelContainer(for: Item.self, Lot.self)
+        NotificationManager.shared.requestPermission()
+        let context = container.mainContext
+        let descriptor = FetchDescriptor<Item>()
+        if let items = try? context.fetch(descriptor) {
+            NotificationManager.shared.rescheduleAll(items: items)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             InventoryView()
         }
-        .modelContainer(for: [Item.self, Lot.self])
+        .modelContainer(container)
     }
 }
