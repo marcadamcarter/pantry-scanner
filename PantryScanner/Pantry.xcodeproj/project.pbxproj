@@ -53,7 +53,7 @@
 				51F228B22843D090009482EF /* Assets.xcassets */,
 				51F228B42843D090009482EF /* Preview Content */,
 			);
-			path = SimpleNews;
+			path = Pantry;
 			sourceTree = "<group>";
 		};
 		51F228B42843D090009482EF /* Preview Content */ = {
@@ -284,10 +284,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"SimpleNews/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"Pantry/Preview Content\"";
 				DEVELOPMENT_TEAM = R8R77PB278;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan barcodes and expiration dates.";
+				INFOPLIST_KEY_CFBundleDisplayName = PantryScanner;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -313,10 +315,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"SimpleNews/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"Pantry/Preview Content\"";
 				DEVELOPMENT_TEAM = R8R77PB278;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan barcodes and expiration dates.";
+				INFOPLIST_KEY_CFBundleDisplayName = PantryScanner;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
